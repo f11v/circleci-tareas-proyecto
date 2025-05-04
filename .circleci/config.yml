@@ -1,0 +1,51 @@
+version: 2.1
+
+jobs:
+  build:
+    docker:
+      - image: cimg/python:3.11
+    steps:
+      - checkout
+      - run: echo "Construyendo el proyecto"
+
+  test:
+    docker:
+      - image: cimg/python:3.11
+    parallelism: 4
+    steps:
+      - checkout
+      - run:
+          name: Ejecutando pruebas en paralelo
+          command: |
+            circleci tests split tests/test_suite.py
+
+  deploy:
+    docker:
+      - image: cimg/python:3.11
+    steps:
+      - checkout
+      - run: echo "Desplegando la aplicación"
+
+  notify:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - run:
+          name: Notificar a Slack
+          command: |
+            curl -X POST -H 'Content-type: application/json'               --data '{"text":"Pipeline finalizado correctamente ✅"}'               $SLACK_WEBHOOK_URL
+
+workflows:
+  version: 2
+  flujo-principal:
+    jobs:
+      - build
+      - test:
+          requires:
+            - build
+      - deploy:
+          requires:
+            - test
+      - notify:
+          requires:
+            - deploy
