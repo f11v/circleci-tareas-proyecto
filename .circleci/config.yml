@@ -1,51 +1,63 @@
 version: 2.1
 
-jobs:
-  build:
-    docker:
-      - image: cimg/python:3.11
-    steps:
-      - checkout
-      - run: echo "Construyendo el proyecto"
+orbs:
+  slack: circleci/slack@4.12.5
 
-  test:
+executors:
+  python-executor:
     docker:
-      - image: cimg/python:3.11
-    parallelism: 4
+      - image: cimg/python:3.10
+    working_directory: ~/project
+
+jobs:
+  install-dependencies:
+    executor: python-executor
     steps:
       - checkout
       - run:
-          name: Ejecutando pruebas en paralelo
+          name: Instalar dependencias
+          command: pip install -r requirements.txt
+
+  run-tests:
+    executor: python-executor
+    parallelism: 2
+    steps:
+      - checkout
+      - run:
+          name: Instalar dependencias para pruebas
+          command: pip install -r requirements.txt
+      - run:
+          name: Ejecutar pruebas en paralelo
           command: |
-            circleci tests split tests/test_suite.py
+            TESTFILES=$(circleci tests split --split-by=files)
+            pytest $TESTFILES
 
   deploy:
-    docker:
-      - image: cimg/python:3.11
+    executor: python-executor
     steps:
       - checkout
-      - run: echo "Desplegando la aplicación"
-
-  notify:
-    docker:
-      - image: cimg/base:stable
-    steps:
       - run:
-          name: Notificar a Slack
-          command: |
-            curl -X POST -H 'Content-type: application/json'               --data '{"text":"Pipeline finalizado correctamente ✅"}'               $SLACK_WEBHOOK_URL
+          name: Simulación de despliegue
+          command: echo "Desplegando la app..."
 
 workflows:
   version: 2
-  flujo-principal:
+  build-and-deploy:
     jobs:
-      - build
-      - test:
+      - install-dependencies
+      - run-tests:
           requires:
-            - build
+            - install-dependencies
       - deploy:
           requires:
-            - test
-      - notify:
-          requires:
-            - deploy
+            - run-tests
+          filters:
+            branches:
+              only: main
+    post-steps:
+      - slack/notify:
+          event: fail
+          template: basic_fail_1
+      - slack/notify:
+          event: pass
+          template: basic_success_1
